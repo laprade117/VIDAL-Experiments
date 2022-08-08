@@ -37,6 +37,21 @@ def load_preprocessed_data():
             annotator_masks.append(mask)
 
         masks.append(np.moveaxis(annotator_masks, 0, -1))
+    
+    # Replace bad pixels with color most frequent among neighbors
+    for i in range(len(masks)):
+        for j in range(num_annotators):
+            m = masks[i][:,:,:,j]
+            mp = np.array([255-255*(np.sum(m,axis=-1)>0), m[...,2], m[...,0]]) / 255
+            if np.sum(mp) - mp.shape[1] * mp.shape[2] != 0:
+                bad_pixels = np.argwhere(np.sum(m,axis=2) == 510)
+                for k in range(len(bad_pixels)):
+                    window = m[bad_pixels[k,0]-3:bad_pixels[k,0]+4,bad_pixels[k,1]-3:bad_pixels[k,1]+4]
+                    if np.sum(window[...,0]) > np.sum(window[...,2]):
+                        m[bad_pixels[k,0],bad_pixels[k,1]] = [255,0,0]
+                    else:
+                        m[bad_pixels[k,0],bad_pixels[k,1]] = [0,0,255]
+                masks[i][:,:,:,j] = m
         
     return images, masks
 
@@ -222,27 +237,24 @@ class UNetLoader(Dataset):
                  training=False,
                  augment=False):
         
-        self.images = images
-        self.masks = masks
-        
         self.input_size = input_size
         self.training = training
         self.augment = augment
         
         self.annotator_idx = None
         
-        image_patches = []
-        mask_patches = []
+        self.image_patches = []
+        self.mask_patches = []
         for i in range(len(images)):
             im, ma = extract_patches(images[i], masks[i], patch_size=256, shifted=False)
-            image_patches += list(im)
-            mask_patches += list(ma)
+            self.image_patches += list(im)
+            self.mask_patches += list(ma)
             im, ma = extract_patches(images[i], masks[i], patch_size=256, shifted=True)
-            image_patches += list(im)
-            mask_patches += list(ma)
+            self.image_patches += list(im)
+            self.mask_patches += list(ma)
             
-        self.image_patches = np.array(image_patches, dtype='uint8')
-        self.mask_patches = np.array(mask_patches, dtype='uint8')
+        self.image_patches = np.array(self.image_patches, dtype='uint8')
+        self.mask_patches = np.array(self.mask_patches, dtype='uint8')
         
         self.labels_1 = np.argwhere(np.sum(self.mask_patches[:,:,:,0,:], axis=(1,2,3)) > 0).ravel()
         self.labels_2 = np.argwhere(np.sum(self.mask_patches[:,:,:,2,:], axis=(1,2,3)) > 0).ravel()
