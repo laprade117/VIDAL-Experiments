@@ -1,7 +1,7 @@
 import glob
 import numpy as np
 from skimage import io
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 
 import matplotlib.pyplot as plt
 
@@ -24,12 +24,27 @@ batch_size = 32
 lr = 0.0001
 
 def setup_loaders(split_index, random_seed=15496):
+    
     images, masks = loader.load_preprocessed_data()
-
-    kf = KFold(n_splits=5, shuffle=True, random_state=random_seed)
+    
+    classes = []
+    for i in range(len(masks)):
+        m = masks[i]
+        colors = np.sum(m, axis=(0,1,3)) > 0
+        if (colors[0] == 0) and (colors[1] == 0) and (colors[2] == 0):
+            classes.append(0)
+        elif (colors[0] == 0) and (colors[1] == 0) and (colors[2] == 1):
+            classes.append(1)
+        elif (colors[0] == 1) and (colors[1] == 0) and (colors[2] == 0):
+            classes.append(2)
+        elif (colors[0] == 1) and (colors[1] == 0) and (colors[2] == 1):
+            classes.append(3)
+    classes = np.array(classes)
+    
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed)
 
     i = 0
-    for train_idx, val_idx in kf.split(images):
+    for train_idx, val_idx in kf.split(images, classes):
         if split_index == i:
             break
         i += 1
@@ -59,6 +74,7 @@ def setup_loaders(split_index, random_seed=15496):
                             batch_size=batch_size,
                             shuffle=False,
                             num_workers=0)
+    
     return train_loader, val_loader
 
 for i in range(5):

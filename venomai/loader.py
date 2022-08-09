@@ -8,7 +8,8 @@ from scipy.ndimage import map_coordinates
 from skimage.util.shape import view_as_blocks
 
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedShuffleSplit
 
 from torch.utils.data import Dataset, DataLoader
 
@@ -86,34 +87,56 @@ def extract_patches(image, mask, patch_size=256, shifted=False):
 
 def get_split(images, masks, split_index, split_ratios=None, num_folds=5, outer_seed=123, inner_seed=321):
     
+    classes = []
+    for i in range(len(masks)):
+        m = masks[i]
+        colors = np.sum(m, axis=(0,1,3)) > 0
+        if (colors[0] == 0) and (colors[1] == 0) and (colors[2] == 0):
+            classes.append(0)
+        elif (colors[0] == 0) and (colors[1] == 0) and (colors[2] == 1):
+            classes.append(1)
+        elif (colors[0] == 1) and (colors[1] == 0) and (colors[2] == 0):
+            classes.append(2)
+        elif (colors[0] == 1) and (colors[1] == 0) and (colors[2] == 1):
+            classes.append(3)
+    classes = np.array(classes)
+    
     if split_ratios is None:
         split_ratios = [0.6,0.2,0.2]
         
     train_ratio, val_ratio, test_ratio = split_ratios
     
-    outer_split = train_test_split(images,
-                                   masks,
-                                   test_size=test_ratio,
-                                   shuffle=True,
-                                   random_state=outer_seed)
-    
-    train_images, test_images, train_masks, test_masks = outer_split
-    
-    kf = KFold(n_splits=5, shuffle=True, random_state=inner_seed)
+    sss = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=outer_seed)
     
     i = 0
-    for train_idx, val_idx in kf.split(train_images):
+    for train_val_idx, test_idx in sss.split(images, classes):
+        if i == 0:
+            break
+        i += 1
+        
+    test_images = [images[i] for i in test_idx]
+    test_masks = [masks[i] for i in test_idx]
+    test_classes = [classes[i] for i in test_idx]
+    
+    train_val_images = [images[i] for i in train_val_idx]
+    train_val_masks = [masks[i] for i in train_val_idx]
+    train_val_classes = [classes[i] for i in train_val_idx]
+    
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=inner_seed)
+    
+    i = 0
+    for train_idx, val_idx in kf.split(train_val_images, train_val_classes):
         if split_index == i:
             break
         i += 1
     
-    val_images = [train_images[i] for i in val_idx]
-    val_masks = [train_masks[i] for i in val_idx]
+    val_images = [train_val_images[i] for i in val_idx]
+    val_masks = [train_val_masks[i] for i in val_idx]
+    val_classes = [train_val_classes[i] for i in val_idx]
     
-    train_images = [train_images[i] for i in train_idx]
-    train_masks = [train_masks[i] for i in train_idx]
-    
-    print(len(train_images), len(val_images), len(test_images))
+    train_images = [train_val_images[i] for i in train_idx]
+    train_masks = [train_val_masks[i] for i in train_idx]
+    train_classes = [train_val_classes[i] for i in train_idx]
     
     return train_images, train_masks, val_images, val_masks, test_images, test_masks
 
@@ -332,7 +355,7 @@ class UNetLoader(Dataset):
 #         plt.show()
         
         image_patch = image_patch / 255.0
-        mask_patch = mask_patch / 255.0
+        mask_patch = (mask_patch > 0).astype(np.float32)
         weight_patch = (weight_patch > 0).astype(np.float32)
         
         sample = (image_patch.astype(np.float32), mask_patch.astype(np.float32), weight_patch.astype(np.float32))
