@@ -28,7 +28,7 @@ def crossentropy_loss(y_pred, y_true, weight=None, axes=[2,3]):
     takes the mean across the remaining axes. 
     """
     
-    epsilon = 1e-12
+    epsilon = 1e-8
     
     # Crossentropy computation
     if weight is not None:
@@ -39,6 +39,8 @@ def crossentropy_loss(y_pred, y_true, weight=None, axes=[2,3]):
         counts = torch.prod(torch.take(torch.tensor(y_true.shape), torch.tensor(axes)))
 
     ce = - torch.sum(ce, axis=axes) / counts
+
+    #ce = torch.nan_to_num(ce, nan=0, posinf=0, neginf=0)
         
     return torch.mean(ce)
 
@@ -48,7 +50,7 @@ def dice(y_pred, y_true, weight=None, axes=[2,3]):
     takes the mean across the remaining axes. 
     """
     
-    epsilon = 1e-12
+    epsilon = 1e-8
     
     if weight is not None:
         y_pred = y_pred * weight
@@ -92,7 +94,7 @@ def mcc(y_pred, y_true, weight=None, axes=[2,3]):
     takes the mean across the remaining axes. 
     """
     
-    epsilon = 1e-12 
+    epsilon = 1e-8
     
     # Compute confusion matrix percentages
     tp = true_positives(y_pred, y_true, weight, axes)
@@ -101,9 +103,11 @@ def mcc(y_pred, y_true, weight=None, axes=[2,3]):
     fn = false_negatives(y_pred, y_true, weight, axes)
     
     # MCC computation
-    num = (tp * tn) - (fp * fn)
+    num = (tp * tn) - (fp * fn) + epsilon
     den = ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))**0.5
     mcc_score = (num + epsilon) / (den + epsilon)
+
+    #cemcc_score= torch.nan_to_num(mcc_score, nan=0, posinf=0, neginf=0)
     
     return torch.mean(mcc_score)
 

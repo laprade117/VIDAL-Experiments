@@ -44,7 +44,7 @@ def load_preprocessed_data():
         for j in range(num_annotators):
             m = masks[i][:,:,:,j]
             mp = np.array([255-255*(np.sum(m,axis=-1)>0), m[...,2], m[...,0]]) / 255
-            if np.sum(mp) - mp.shape[1] * mp.shape[2] != 0:
+            if len(np.unique(np.sum(mp,axis=0))) != 1:
                 bad_pixels = np.argwhere(np.sum(m,axis=2) == 510)
                 for k in range(len(bad_pixels)):
                     window = m[bad_pixels[k,0]-3:bad_pixels[k,0]+4,bad_pixels[k,1]-3:bad_pixels[k,1]+4]
@@ -137,6 +137,8 @@ def get_split(images, masks, split_index, split_ratios=None, num_folds=5, outer_
     train_images = [train_val_images[i] for i in train_idx]
     train_masks = [train_val_masks[i] for i in train_idx]
     train_classes = [train_val_classes[i] for i in train_idx]
+
+    del train_val_images, train_val_masks, train_val_classes
     
     return train_images, train_masks, val_images, val_masks, test_images, test_masks
 
@@ -178,22 +180,26 @@ def setup_loaders(images,
     full_loader = DataLoader(train_dataset,
                              batch_size=batch_size,
                              shuffle=True,
-                             num_workers=0)
+                             num_workers=8,
+                             drop_last=True)
     
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
                               shuffle=True,
-                              num_workers=0)
+                              num_workers=8,
+                              drop_last=True)
 
     val_loader = DataLoader(val_dataset,
                             batch_size=batch_size,
                             shuffle=False,
-                            num_workers=0)
+                            num_workers=8,
+                            drop_last=True)
     
     test_loader = DataLoader(test_dataset,
                              batch_size=batch_size,
                              shuffle=False,
-                             num_workers=0)
+                             num_workers=8,
+                             drop_last=True)
     
     return full_loader, train_loader, val_loader, test_loader
 
@@ -222,28 +228,31 @@ def augment_slice(image_patch, mask_patch, weight_patch):
     transform = A.Compose([
         A.Flip(p=0.5),
         A.Transpose(p=0.5),
-        A.RandomRotate90(p=1),
+        A.RandomRotate90(p=0.5),
         A.Rotate(p=0.5, limit=180, border_mode=cv2.BORDER_CONSTANT, value=0),
-        A.HueSaturationValue(p=0.25, hue_shift_limit=100),
-        A.RandomBrightnessContrast(p=0.25, brightness_limit=0.4, contrast_limit=0.2),
+        #A.RandomBrightnessContrast(p=0.1, brightness_limit=0.4, contrast_limit=0.2),
+	#A.OneOf([
+        #	A.HueSaturationValue(hue_shift_limit=30),
+        #	A.RGBShift(r_shift_limit=30, g_shift_limit=30, b_shift_limit=30),
+        #], p=0.1),
         A.OneOf([
             A.GaussNoise(),
-        ], p=0.2),
+        ], p=0.05),
         A.OneOf([
             A.MotionBlur(),
             A.MedianBlur(blur_limit=3),
             A.Blur(blur_limit=3),
-        ], p=0.2),
+        ], p=0.05),
         A.OneOf([
             A.OpticalDistortion(),
             A.GridDistortion(),
             A.PiecewiseAffine(),
-        ], p=0.2),
+        ], p=0.05),
         A.OneOf([
             A.CLAHE(clip_limit=2),
             A.Sharpen(),
             A.Emboss(),           
-        ], p=0.2),
+        ], p=0.05)
     ])
     
     transformed = transform(image=image_patch, masks=[mask_patch, weight_patch])
@@ -357,6 +366,7 @@ class UNetLoader(Dataset):
         image_patch = image_patch / 255.0
         mask_patch = (mask_patch > 0).astype(np.float32)
         weight_patch = (weight_patch > 0).astype(np.float32)
+        weight_patch = weight_patch * 0 + 1
         
         sample = (image_patch.astype(np.float32), mask_patch.astype(np.float32), weight_patch.astype(np.float32))
 

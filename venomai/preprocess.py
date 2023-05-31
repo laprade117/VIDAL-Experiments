@@ -239,6 +239,7 @@ def preprocess_image(image, inner_area=10**2, target_res=5):
 
     # Apply template white balancing
     black_squares = find_all_black_squares(image)
+        
     white_point, black_point, pixel_resolution = compute_square_info(black_squares, inner_area=inner_area)
     image = white_balance(image, white_point, black_point)
 

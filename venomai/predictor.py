@@ -65,22 +65,33 @@ def detect_windows(image, input_size=256):
 def predict_windows(model, windows, augment=False):
     
     # Get CUDA device if available
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
     
     model.to(device)
     model.eval()
     
     input_images = torch.tensor(np.moveaxis(windows / 255, -1, 1).astype('float32')).to(device)
-    output_preds = model(input_images).cpu().detach().numpy()[:,0,:,:]
+    output_preds = model(input_images).cpu().detach().numpy()
     
     return output_preds
 
-def predict_image(model, image, augment=False, apply_preprocessing=True, return_windows=True, target_res=5):
+def predict_image(model, image, centers=None, augment=False, apply_preprocessing=True, return_windows=True, input_size=256, target_res=5):
     
     if apply_preprocessing:
         image = preprocess.preprocess_image(image, target_res=5)
 
-    windows = detect_windows(image)
+    if centers is not None:
+        windows = []
+        half_input_size = int(input_size / 2)
+        for i in range(len(centers)):
+            window = image[centers[i,0]-half_input_size:centers[i,0]+half_input_size,
+                           centers[i,1]-half_input_size:centers[i,1]+half_input_size]
+            windows.append(window)
+        windows = np.array(windows)
+    else:
+        windows = detect_windows(image)
+
     predictions = predict_windows(model, windows)
     
     if return_windows:
@@ -88,24 +99,21 @@ def predict_image(model, image, augment=False, apply_preprocessing=True, return_
     else:
         return predictions
     
-def compute_haemorrhagic_units(predictions, windows, target_res=5, return_stats=False):
+def compute_necrotic_units(predictions, windows, target_res=5, return_stats=False):
     
-    prediction_masks = predictions > 0.5
-    
-    # Compute area
-    pixel_areas = np.sum(prediction_masks, axis=(1,2))
-    real_areas = pixel_areas / (target_res**2)
+    prediction_masks = np.argmax(predictions, 1)
 
-    # Compute luminance
-    mean_rgb_values = np.sum(prediction_masks[:,:,:,None] * windows, axis=(1,2)) / pixel_areas[:,None]
-    mean_linear_rgb_values = preprocess.srgb_to_linear(mean_rgb_values) / 255
-    luminance = np.dot(mean_linear_rgb_values, [0.2126, 0.7152, 0.0722])
+    # Compute area
+    light_pixel_areas = np.sum(prediction_masks == 1, axis=(1,2))
+    light_real_areas = light_pixel_areas / (target_res**2)
+    dark_pixel_areas = np.sum(prediction_masks == 2, axis=(1,2))
+    dark_real_areas = dark_pixel_areas / (target_res**2)
     
-    # Compute hau
-    hau = real_areas / (10 * luminance)
-    hau = np.nan_to_num(hau)
+    # Compute nu
+    nu = dark_real_areas * 2.017 + light_real_areas
+    nu = np.nan_to_num(nu)
     
     if return_stats:
-        return hau, real_areas, luminance, mean_rgb_values
+        return nu, light_real_areas, dark_real_areas
     else:
-        return hau
+        return nu

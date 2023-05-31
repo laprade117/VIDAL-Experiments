@@ -1,3 +1,4 @@
+import gc
 import glob
 import numpy as np
 
@@ -46,6 +47,7 @@ def train_model(i, j, num_annotators,
     trainer.fit(model, train_loader, val_loader)
    
     del model
+    gc.collect()
 
     model = unet.UNet.load_from_checkpoint(f'{model_path}{model_name}_{i}_{j}.ckpt')
     
@@ -65,6 +67,7 @@ def train_model(i, j, num_annotators,
     wandb.finish()
                            
     del trainer, model
+    gc.collect()
     
     return results, dataset_results
 
@@ -72,7 +75,7 @@ project_name = 'VenomAI-Necrosis-UNet'
 model_path = 'models/'
 model_name = 'unet'
 
-epochs = 100
+epochs = 180
 batch_size = 32
 lr = 0.0001
 
@@ -84,34 +87,34 @@ num_folds = 5
 results = np.zeros((num_runs, num_folds, num_annotators, 5))
 dataset_results = np.zeros((num_runs, num_folds, 5))
 
-for i in range(num_runs):
-    
-    outer_seed = np.random.randint(1000000)
-    inner_seed = np.random.randint(1000000)
-    
-    for j in range(num_folds):
-        
-        # Get data loaders
-        full_loader, train_loader, val_loader, test_loader = loader.create_data_loaders(i,
-                                                                                        batch_size=batch_size,
-                                                                                        input_size=256,
-                                                                                        outer_seed=outer_seed,
-                                                                                        inner_seed=inner_seed)
+i = 0
 
-        run_results, dataset_run_results = train_model(i, j, num_annotators,
-                                                       project_name, model_path, model_name,
-                                                       full_loader, train_loader, val_loader, test_loader,
-                                                       epochs, batch_size, lr)
+outer_seed = np.random.randint(1000000)
+inner_seed = np.random.randint(1000000)
+
+for j in range(num_folds):
+
+    # Get data loaders
+    full_loader, train_loader, val_loader, test_loader = loader.create_data_loaders(i,
+                                                                                    batch_size=batch_size,
+                                                                                    input_size=256,
+                                                                                    outer_seed=outer_seed,
+                                                                                    inner_seed=inner_seed)
+
+    run_results, dataset_run_results = train_model(i, j, num_annotators,
+                                                project_name, model_path, model_name,
+                                                full_loader, train_loader, val_loader, test_loader,
+                                                epochs, batch_size, lr)
+
+    del full_loader, train_loader, val_loader, test_loader
+    gc.collect()
+
+    print(dataset_run_results)
+
+    for k in range(num_annotators):
+        results[i,j,k,:] = np.array(list(run_results[k].values()))
         
-        del full_loader, train_loader, val_loader, test_loader
-        
-        print(dataset_run_results)
-        
-        for k in range(num_annotators):
-            results[i,j,k,:] = np.array(list(run_results[k].values()))
+    dataset_results[i,j,:] = np.array(list(dataset_run_results[0].values()))
             
-        dataset_results[i,j,:] = np.array(list(dataset_run_results[0].values()))
-        
-best_loss = total_best_loss / (num_runs * num_folds)
-np.save('unet_results.npy', results)
-np.save('unet_best_loss.npy', best_loss)
+np.save(f'unet_results_{i}.npy', results)
+np.save(f'unet_dataset_results_{i}.npy', results)

@@ -141,10 +141,14 @@ class UNet(pl.LightningModule):
         y = torch.round(y)
         y_hat = torch.round(y_hat)
         
-        self.log(f"{set_name}/mcc_ce_loss", loss)
+        if set_name == "train":
+            self.log(f"{set_name}/mcc_ce_loss", loss)
+            self.log(f"{set_name}/mcc", metrics.mcc(y_hat, y, w, axes=[0,2,3]))
+        else:
+            self.log(f"{set_name}/mcc_ce_loss", 1 + loss)
+            self.log(f"{set_name}/mcc", metrics.mcc(y_hat, y, w, axes=[0,2,3]) - 1)
         self.log(f"{set_name}/dice", metrics.dice(y_hat, y, w, axes=[0,2,3]))
         self.log(f"{set_name}/iou", metrics.iou(y_hat, y, w, axes=[0,2,3]))
-        self.log(f"{set_name}/mcc", metrics.mcc(y_hat, y, w, axes=[0,2,3]))
         self.log(f"{set_name}/accuracy", metrics.accuracy(y_hat, y, w, axes=[0,2,3]))
         
     def training_step(self, batch, batch_idx):

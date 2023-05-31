@@ -1,3 +1,4 @@
+import gc
 import glob
 import numpy as np
 from skimage import io
@@ -19,11 +20,11 @@ project_name = 'VenomAI-Necrosis-UNet-Inference'
 model_path = 'models/'
 model_name = 'unet_inference'
 
-epochs = 100
+epochs = 180
 batch_size = 32
 lr = 0.0001
 
-def setup_loaders(split_index, random_seed=15496):
+def setup_loaders(split_index, random_seed=189564):
     
     images, masks = loader.load_preprocessed_data()
     
@@ -69,11 +70,13 @@ def setup_loaders(split_index, random_seed=15496):
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
                               shuffle=True,
-                              num_workers=0)
+                              num_workers=8,
+                              drop_last=True)
     val_loader = DataLoader(val_dataset,
                             batch_size=batch_size,
                             shuffle=False,
-                            num_workers=0)
+                            num_workers=8,
+                            drop_last=True)
     
     return train_loader, val_loader
 
@@ -112,3 +115,4 @@ for i in range(5):
     wandb.finish()
     
     del model, trainer, train_loader, val_loader
+    gc.collect()
