@@ -1,4 +1,4 @@
-# VIDAL - A machine learning tool for snake venom necrosis identification
+# VIDAL - Machine-learning guided Venom Induced Dermonecrosis Analysis tooL
 
 This GitHub repo contains the data, code, figures, and results associated with the paper. If you are looking for the tool itself, you can find it [here](https://github.com/laprade117/VIDAL).
 
